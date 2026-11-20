@@ -1,8 +1,9 @@
+# A set bundles published kits. Replace NAMESPACE with your Docker Hub name.
 # syntax=docker/sandbox-kit:3
 schemaVersion: "3"
 kind: set
 displayName: Team environment
 version: "1.0.0"
 kits:
-  - ref: docker.io/me/sbx-kit-shell:1.0.0
-  - ref: docker.io/me/sbx-kit-gh:2.72.0
+  - ref: docker.io/NAMESPACE/sbx-kit-shell:1.0.0
+  - ref: docker.io/NAMESPACE/sbx-kit-gh:2.72.0
