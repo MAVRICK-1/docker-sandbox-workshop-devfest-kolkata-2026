@@ -1,0 +1,8 @@
+# syntax=docker/sandbox-kit:3
+schemaVersion: "3"
+kind: set
+displayName: Team environment
+version: "1.0.0"
+kits:
+  - ref: docker.io/me/sbx-kit-shell:1.0.0
+  - ref: docker.io/me/sbx-kit-gh:2.72.0
