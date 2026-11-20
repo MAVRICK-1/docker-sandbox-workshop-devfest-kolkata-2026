@@ -30,8 +30,12 @@ Host access needs **TCP support** switched on in Docker Desktop settings (AI sec
 ```bash
 curl http://localhost:12434/engines/v1/chat/completions \
   -H "Content-Type: application/json" \
-  -d '{"model":"ai/smollm2","messages":[{"role":"user","content":"Say hi in five words"}]}'
+  -d '{"model":"ai/smollm2","messages":[{"role":"user","content":"Explain Docker in one line"}]}' | jq -r '.choices[0].message.content'
 ```
+`jq -r '.choices[0].message.content'` prints only the answer. Drop it (use `| jq`) to see the full JSON: token counts, timings and the model path.
+
+**Do not worry if the model ignores details** (for example asking for exactly five words). `smollm2` is a very small model: great for learning the API, weak at following strict instructions. Try a bigger model with `docker model pull` later if you want better answers.
+
 From **inside a container**, the same API is reachable at `model-runner.docker.internal`.
 
 ## How it works (simple)
