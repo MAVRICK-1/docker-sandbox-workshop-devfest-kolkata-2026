@@ -1,0 +1,29 @@
+# syntax=docker/sandbox-kit:3
+schemaVersion: "3"
+kind: mixin
+displayName: req-echo
+description: Echo an HTTP request through httpbin.org
+
+# What gets added to the sandbox: one small script at /usr/local/bin/req-echo
+build: |
+  # syntax=docker/dockerfile:1
+  FROM scratch
+  COPY --chmod=0755 <<'EOF2' /usr/local/bin/req-echo
+  #!/bin/sh
+  path="${1:-}"
+  [ "$#" -gt 0 ] && shift
+  exec curl -sS "https://httpbin.org/anything/${path}" "$@"
+  EOF2
+
+capabilities:
+  # Network: allow ONLY httpbin.org while this kit runs
+  - type: com.docker.sandbox/network-policy@1
+    config:
+      runtime:
+        allow:
+          - httpbin.org
+
+  # Tell the agent what this tool is and when to use it
+  - type: com.docker.sandbox/agent-context@1
+    config:
+      contentFile: ./req-echo-context.md

@@ -1,5 +1,5 @@
-# A set bundles published kits. Replace NAMESPACE with your Docker Hub name.
 # syntax=docker/sandbox-kit:3
+# A set bundles published kits. Replace NAMESPACE with your Docker Hub name.
 schemaVersion: "3"
 kind: set
 displayName: Team environment
