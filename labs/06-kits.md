@@ -42,7 +42,6 @@ exit
 docker buildx build -f req-echo/req-echo.yaml -t req-echo:dev req-echo/
 
 # 2. run the kit locally, no registry needed
-
 SBX_KIT_BUILDER=sandbox sbx run docker.io/sbx/shell:latest --name req-echo-test --kit ./req-echo
 
 # 3. inside the sandbox: use it, then try something the kit does not allow
@@ -54,21 +53,31 @@ sbx rm req-echo-test -f
 ```
 
 ## Publish and run from the registry
+Always publish with a **container builder**. A plain `docker buildx build --push` through the default `docker` driver can drop the kit descriptor. The image then looks like an ordinary image, and `sbx` refuses it with:
+
+```text
+kit manifest has no artifactType and fingerprint did not match
+```
+
 ```bash
 docker login
-docker buildx build ./req-echo -f ./req-echo/req-echo.yaml \
-  -t docker.io/<NAMESPACE>/req-echo:1.0.0 --push
 
-sbx run docker.io/sbx/shell:latest --kit docker.io/<NAMESPACE>/req-echo:1.0.0 .
-```
-Replace `<NAMESPACE>` with your Docker Hub username. Keep a Docker engine running while you build.
-
-**Use a container builder for publishing.** A push through the default `docker` driver with the classic image store can drop the kit descriptor, so the image no longer looks like a kit. Create a container builder once and select it:
-```bash
+# create the container builder once
 docker buildx create --name kit-builder --driver docker-container --bootstrap
+
+# build and push with it
 docker buildx build --builder kit-builder ./req-echo -f ./req-echo/req-echo.yaml \
   -t docker.io/<NAMESPACE>/req-echo:1.0.0 --push
+
+# check the kit descriptor survived the push (should print 1 or more)
+docker buildx imagetools inspect docker.io/<NAMESPACE>/req-echo:1.0.0 --raw \
+  | grep -c "vnd.docker.sandbox.kit.descriptor"
+
+# run it from the registry
+sbx run docker.io/sbx/shell:latest --kit docker.io/<NAMESPACE>/req-echo:1.0.0 .
 ```
+Replace `<NAMESPACE>` with your Docker Hub username. If the check prints `0`, the descriptor was dropped: rebuild with `--builder kit-builder` and push again. Pushing the same tag overwrites the broken image.
+
 For kits shared as multi-platform images, add `--platform linux/amd64,linux/arm64 --provenance=mode=min`.
 
 ## Other kit commands
@@ -98,7 +107,7 @@ Build it, then run it:
 
 ```bash
 docker buildx build -f greet/greet.yaml -t greet:dev greet/
-sbx run docker.io/sbx/shell:latest --name greet-test --kit ./greet
+SBX_KIT_BUILDER=sandbox sbx run docker.io/sbx/shell:latest --name greet-test --kit ./greet
 ```
 
 Inside the sandbox: `greet Kolkata`.
@@ -135,8 +144,10 @@ Source: [docs.docker.com/ai/sandboxes/customize/author/distribute](https://docs.
 
 ```bash
 docker login
-docker buildx build ./greet -f ./greet/greet.yaml \
-  --platform linux/amd64,linux/arm64 \
+docker buildx create --name kit-builder --driver docker-container --bootstrap   # once
+
+docker buildx build --builder kit-builder ./greet -f ./greet/greet.yaml \
+  --platform linux/amd64,linux/arm64 --provenance=mode=min \
   -t docker.io/NAMESPACE/greet:1.0.0 --push
 
 sbx kit sign docker.io/NAMESPACE/greet:1.0.0
@@ -167,7 +178,7 @@ kits:
   - ref: docker.io/NAMESPACE/req-echo:1.0.0
 ```
 
-- Each `ref` must be a published registry reference. Local paths and Git URLs are not accepted, so publish `req-echo` first (see Share your kit).
+- Each `ref` must be a published registry reference. Local paths and Git URLs are not accepted, so publish `req-echo` first (see Publish and run from the registry).
 - A set has no Dockerfile and no `build:` block.
 - Shared settings go on the set. For example, a `network-policy@1` capability for extra domains. Keep tool-specific access in the tool's own kit.
 - Fix or expose arguments on a component:
@@ -183,9 +194,9 @@ kits:
   ```
   Users then run the published set with `--kit-arg lint_mode=fix`.
 
-Build and publish a set like any other kit, then run it:
+Build and publish a set like any other kit, with the container builder, then run it:
 ```bash
-docker buildx build ./codex-tools -f ./codex-tools/codex-tools.yaml \
+docker buildx build --builder kit-builder ./codex-tools -f ./codex-tools/codex-tools.yaml \
   -t docker.io/NAMESPACE/codex-tools:1.0.0 --push
 
 sbx run docker.io/NAMESPACE/codex-tools:1.0.0 --name my-project            # set with a workload
@@ -202,9 +213,11 @@ Rules:
 ## Troubleshooting kits
 Source: [github.com/docker/sandbox-kit-spec](https://github.com/docker/sandbox-kit-spec)
 
+- **`kit manifest has no artifactType and fingerprint did not match`:** the image you pushed is a plain image, because the push dropped the kit descriptor. Rebuild and push with `--builder kit-builder` (see Publish and run from the registry), then check with the `imagetools inspect ... | grep -c` command. It must print 1 or more.
+- **`OCI exporter is not supported for the docker driver`:** your Docker uses the classic image store. Build in a builder sandbox with `SBX_KIT_BUILDER=sandbox sbx run ...`, or create the container builder once (`docker buildx create --name kit-builder --driver docker-container --bootstrap`) and run with `BUILDX_BUILDER=kit-builder sbx run ...`. Turning on the containerd image store also works.
 - **Workload image:** the labs use `docker.io/sbx/shell:latest`, which works with local `--kit` builds. `docker/sbx-kit-shell` is not published on Docker Hub.
 - **401 when pulling a kit:** run `sbx login` (and `docker login`) and retry.
-- **A local kit build fails** because the host builder cannot export OCI: run with `SBX_KIT_BUILDER=sandbox sbx run ...` to build in a dedicated builder sandbox instead. `SBX_KIT_BUILDER=host` forces the host builder.
+- **A local kit build fails** for another reason: `SBX_KIT_BUILDER=host` forces the host builder, `SBX_KIT_BUILDER=sandbox` forces the builder sandbox.
 - **Linux:** install with `sudo apt install docker-sbx`, then `sudo usermod -aG kvm $USER` and log in again so `/dev/kvm` works before `sbx run`. Then run `sbx login`.
 - **Workload base images** must provide bash, the `agent` user (uid 1000), git and a CA store. A kit built on a bare distro image builds but fails when the agent launches.
 - **Check a published kit** with `kit-tck validate docker.io/NAMESPACE/req-echo:1.0.0` (the spec repo's checker). A successful push alone does not prove the descriptor survived.
