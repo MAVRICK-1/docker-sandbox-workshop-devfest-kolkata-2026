@@ -62,6 +62,14 @@ sbx run docker/sbx-kit-shell:1.0.0 --kit docker.io/<NAMESPACE>/req-echo:1.0.0 .
 ```
 Replace `<NAMESPACE>` with your Docker Hub username. Keep a Docker engine running while you build.
 
+**Use a container builder for publishing.** A push through the default `docker` driver with the classic image store can drop the kit descriptor, so the image no longer looks like a kit. Create a container builder once and select it:
+```bash
+docker buildx create --name kit-builder --driver docker-container --bootstrap
+docker buildx build --builder kit-builder ./req-echo -f ./req-echo/req-echo.yaml \
+  -t docker.io/<NAMESPACE>/req-echo:1.0.0 --push
+```
+For kits shared as multi-platform images, add `--platform linux/amd64,linux/arm64 --provenance=mode=min`.
+
 ## Other kit commands
 `sbx kit add | inspect | pack | push | pull | sign | verify | provenance`. Flags may change: check `sbx kit --help`.
 
@@ -141,3 +149,61 @@ Share through Git instead with a reference like `git+https://github.com/ORG/REPO
 - `sbx` pulls published images. It cannot use an image that exists only in your local Docker store. While developing, pass the folder with `--kit ./greet`.
 - `docker run` applies only the image config, not the kit settings or hooks. Run kits with `sbx`.
 - `sbx kit pack`, `push` and `pull` are for v1 and v2 kits. Use Buildx for v3.
+
+## Kit sets
+Source: [docs.docker.com/ai/sandboxes/customize/author/kit-sets](https://docs.docker.com/ai/sandboxes/customize/author/kit-sets/)
+
+A set is a v3 kit with `kind: set` that bundles existing kits into one kit your team can run. It holds one workload and any number of mixins, or only mixins that users add to a workload with `--kit`. Example: [examples/kit-set.yaml](../examples/kit-set.yaml).
+
+```yaml
+# syntax=docker/sandbox-kit:3
+schemaVersion: "3"
+kind: set
+displayName: Codex with req-echo
+version: "1.0.0"
+kits:
+  - ref: docker.io/docker/sbx-kit-codex:0.155.1
+  - ref: docker.io/NAMESPACE/req-echo:1.0.0
+```
+
+- Each `ref` must be a published registry reference. Local paths and Git URLs are not accepted, so publish `req-echo` first (see Share your kit).
+- A set has no Dockerfile and no `build:` block.
+- Shared settings go on the set. For example, a `network-policy@1` capability for extra domains. Keep tool-specific access in the tool's own kit.
+- Fix or expose arguments on a component:
+  ```yaml
+  args:
+    lint_mode:
+      default: check
+      enum: [check, fix]
+  kits:
+    - ref: docker.io/my-org/linter-kit:1.0.0
+      args:
+        mode: ${{ kit.args.lint_mode }}
+  ```
+  Users then run the published set with `--kit-arg lint_mode=fix`.
+
+Build and publish a set like any other kit, then run it:
+```bash
+docker buildx build ./codex-tools -f ./codex-tools/codex-tools.yaml \
+  -t docker.io/NAMESPACE/codex-tools:1.0.0 --push
+
+sbx run docker.io/NAMESPACE/codex-tools:1.0.0 --name my-project            # set with a workload
+sbx run WORKLOAD_REFERENCE --kit docker.io/NAMESPACE/codex-tools:1.0.0     # mixins-only set
+```
+
+Rules:
+- At most one workload per set. The build fails if more than one kit is a workload.
+- The build fails if a dependency is missing or two kits declare the same feature in `provides`.
+- Reordering `kits:` does not change the order. Dependencies apply first. Give component files separate paths.
+- A published set records each component's exact image digest. Existing sandboxes keep the kit configuration they were created with, so create a new sandbox to use an updated set.
+- If you add instructions through `agent-context` on the set, leave out the filename.
+
+## Troubleshooting kits
+Source: [github.com/docker/sandbox-kit-spec](https://github.com/docker/sandbox-kit-spec)
+
+- **Use `docker/` references for v3 kits.** The `docker` org on Docker Hub publishes v3 kits (for example `docker/sbx-kit-shell:1.0.0`). The `sbx` org still carries the older v2 line. Do not mix the two.
+- **401 when pulling a kit:** run `sbx login` (and `docker login`) and retry.
+- **A local kit build fails** because the host builder cannot export OCI: run with `SBX_KIT_BUILDER=sandbox sbx run ...` to build in a dedicated builder sandbox instead. `SBX_KIT_BUILDER=host` forces the host builder.
+- **Linux:** install with `sudo apt install docker-sbx`, then `sudo usermod -aG kvm $USER` and log in again so `/dev/kvm` works before `sbx run`. Then run `sbx login`.
+- **Workload base images** must provide bash, the `agent` user (uid 1000), git and a CA store. A kit built on a bare distro image builds but fails when the agent launches.
+- **Check a published kit** with `kit-tck validate docker.io/NAMESPACE/req-echo:1.0.0` (the spec repo's checker). A successful push alone does not prove the descriptor survived.

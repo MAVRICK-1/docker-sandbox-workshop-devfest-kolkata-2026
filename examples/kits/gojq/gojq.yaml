@@ -3,7 +3,7 @@ schemaVersion: "3"
 kind: mixin
 provides: ["gojq@0.12.17"]
 
-# Multi-stage: build the tool in a Go stage, copy only the binary into the kit
+# Build the tool in one stage, copy only the binary into the kit
 build: |
   FROM golang:1.25 AS build
   RUN CGO_ENABLED=0 go install github.com/itchyny/gojq/cmd/gojq@v0.12.17
