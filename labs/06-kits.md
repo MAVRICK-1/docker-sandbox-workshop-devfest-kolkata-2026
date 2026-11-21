@@ -3,7 +3,7 @@
 **Idea:** a kit is a recipe card for a sandbox: tools, rules and settings, shared as an OCI image. Think npm package, but for agent environments. Spec v3 is **experimental**. You need `sbx` 0.45 or newer and Docker with Buildx.
 
 ## Kinds
-- **workload**: a full environment (Docker publishes `docker.io/docker/sbx-kit-shell:1.0.0`)
+- **workload**: a full environment (Docker publishes `docker.io/sbx/shell:latest`)
 - **mixin**: adds pieces to a workload. Most kits are mixins.
 - **set**: a bundle of other kits ([examples/kit-set.yaml](../examples/kit-set.yaml))
 
@@ -34,7 +34,7 @@ Run these from the folder that contains `req-echo/`.
 
 ```bash
 # 0. baseline: no kit, the command is missing
-sbx run docker/sbx-kit-shell:1.0.0 --name req-echo-before
+sbx run docker.io/sbx/shell:latest --name req-echo-before
 req-echo            # expect: command not found
 exit
 
@@ -42,7 +42,7 @@ exit
 docker buildx build -f req-echo/req-echo.yaml -t req-echo:dev req-echo/
 
 # 2. run the kit locally, no registry needed
-sbx run docker/sbx-kit-shell:1.0.0 --name req-echo-test --kit ./req-echo
+sbx run docker.io/sbx/shell:latest --name req-echo-test --kit ./req-echo
 
 # 3. inside the sandbox: use it, then try something the kit does not allow
 req-echo 'orders?status=open'     # works: JSON echo from httpbin.org
@@ -58,7 +58,7 @@ docker login
 docker buildx build ./req-echo -f ./req-echo/req-echo.yaml \
   -t docker.io/<NAMESPACE>/req-echo:1.0.0 --push
 
-sbx run docker/sbx-kit-shell:1.0.0 --kit docker.io/<NAMESPACE>/req-echo:1.0.0 .
+sbx run docker.io/sbx/shell:latest --kit docker.io/<NAMESPACE>/req-echo:1.0.0 .
 ```
 Replace `<NAMESPACE>` with your Docker Hub username. Keep a Docker engine running while you build.
 
@@ -97,7 +97,7 @@ Build it, then run it:
 
 ```bash
 docker buildx build -f greet/greet.yaml -t greet:dev greet/
-sbx run docker/sbx-kit-shell:1.0.0 --name greet-test --kit ./greet
+sbx run docker.io/sbx/shell:latest --name greet-test --kit ./greet
 ```
 
 Inside the sandbox: `greet Kolkata`.
@@ -201,7 +201,7 @@ Rules:
 ## Troubleshooting kits
 Source: [github.com/docker/sandbox-kit-spec](https://github.com/docker/sandbox-kit-spec)
 
-- **Use `docker/` references for v3 kits.** The `docker` org on Docker Hub publishes v3 kits (for example `docker/sbx-kit-shell:1.0.0`). The `sbx` org still carries the older v2 line. Do not mix the two.
+- **Workload image:** the labs use `docker.io/sbx/shell:latest`, which works with local `--kit` builds. `docker/sbx-kit-shell` is not published on Docker Hub.
 - **401 when pulling a kit:** run `sbx login` (and `docker login`) and retry.
 - **A local kit build fails** because the host builder cannot export OCI: run with `SBX_KIT_BUILDER=sandbox sbx run ...` to build in a dedicated builder sandbox instead. `SBX_KIT_BUILDER=host` forces the host builder.
 - **Linux:** install with `sudo apt install docker-sbx`, then `sudo usermod -aG kvm $USER` and log in again so `/dev/kvm` works before `sbx run`. Then run `sbx login`.
