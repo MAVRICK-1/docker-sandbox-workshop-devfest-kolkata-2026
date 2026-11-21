@@ -42,7 +42,8 @@ exit
 docker buildx build -f req-echo/req-echo.yaml -t req-echo:dev req-echo/
 
 # 2. run the kit locally, no registry needed
-sbx run docker.io/sbx/shell:latest --name req-echo-test --kit ./req-echo
+
+SBX_KIT_BUILDER=sandbox sbx run docker.io/sbx/shell:latest --name req-echo-test --kit ./req-echo
 
 # 3. inside the sandbox: use it, then try something the kit does not allow
 req-echo 'orders?status=open'     # works: JSON echo from httpbin.org
